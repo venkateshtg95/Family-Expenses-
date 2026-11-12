@@ -1,29 +1,22 @@
-const CACHE_NAME = 'expense-app-v1';
-const ASSETS = [
-  './',
-  './index.html',
-  './manifest.json'
-];
+const CACHE_NAME = 'expense-app-v2';
+const ASSETS = ['./', './index.html', './manifest.json'];
 
-// Install Event: Cache the UI files
 self.addEventListener('install', e => {
+  self.skipWaiting();
+  e.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)));
+});
+
+self.addEventListener('activate', e => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(ASSETS);
-    })
+    caches.keys().then(keys => Promise.all(
+      keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
+    ))
   );
 });
 
-// Fetch Event: Serve UI from cache, let API calls go to the network
 self.addEventListener('fetch', e => {
-  // Do not intercept calls to your Google Apps Script
-  if (e.request.url.includes('script.google.com')) {
-    return;
-  }
-  
+  if (e.request.url.includes('script.google.com')) return;
   e.respondWith(
-    caches.match(e.request).then(response => {
-      return response || fetch(e.request);
-    })
+    fetch(e.request).catch(() => caches.match(e.request))
   );
 });
