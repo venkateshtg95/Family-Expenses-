@@ -1,0 +1,15 @@
+{
+  "name": "Family Expenses",
+  "short_name": "Expenses",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/Rupee_symbol_black.svg/512px-Rupee_symbol_black.svg.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

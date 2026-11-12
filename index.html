@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Family Expenses</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#4f46e5">
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen pb-12">
+  <header class="bg-indigo-600 text-white p-4 shadow-md sticky top-0 z-50 flex justify-between items-center">
+    <div>
+      <h1 class="text-lg font-bold">Family Expenses</h1>
+      <p id="syncStatus" class="text-xs text-indigo-200">Checking network...</p>
+    </div>
+    <select id="activeMember" class="bg-indigo-700 text-white text-sm px-3 py-1.5 rounded-lg font-medium border border-indigo-500 focus:outline-none">
+      <option value="Venkatesha">👤 Venkatesha</option>
+      <option value="Anjali">👤 Anjali</option>
+    </select>
+  </header>
+  
+  <main class="max-w-md mx-auto p-4 space-y-4">
+    <!-- Offline Queue Alert -->
+    <div id="offlineAlert" class="hidden bg-amber-100 text-amber-800 p-3 rounded-xl text-xs font-semibold text-center border border-amber-200">
+      You are offline. <span id="pendingCount">0</span> expense(s) waiting to sync.
+    </div>
+
+    <!-- Summary -->
+    <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 grid grid-cols-2 gap-4 text-center">
+      <div class="bg-indigo-50 p-3 rounded-xl">
+        <span class="text-xs text-indigo-600 font-semibold block">THIS MONTH</span>
+        <span id="monthlyTotal" class="text-xl font-bold text-indigo-900">₹0</span>
+      </div>
+      <div class="bg-emerald-50 p-3 rounded-xl">
+        <span class="text-xs text-emerald-600 font-semibold block">FIXED / INVESTMENTS</span>
+        <span id="fixedTotal" class="text-xl font-bold text-emerald-900">₹0</span>
+      </div>
+    </div>
+
+    <!-- Expense Form -->
+    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+      <h2 class="font-semibold text-slate-700 mb-3">Add Expense</h2>
+      <form id="expenseForm" onsubmit="handleSubmit(event)" class="space-y-3">
+        <div class="flex gap-2">
+          <button type="button" id="typeDaily" onclick="setExpenseType('Daily')" class="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 text-white">Daily</button>
+          <button type="button" id="typeFixed" onclick="setExpenseType('Fixed / Investment')" class="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600">Fixed / Investment</button>
+        </div>
+        <div>
+          <label class="text-xs text-slate-500 font-medium">Amount (₹)</label>
+          <input type="number" id="amount" required placeholder="0.00" class="w-full text-lg font-bold border rounded-xl p-2.5 mt-1 focus:ring-2 focus:ring-indigo-500 outline-none">
+        </div>
+        <div>
+          <label class="text-xs text-slate-500 font-medium">Category</label>
+          <select id="category" class="w-full border rounded-xl p-2.5 mt-1 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none">
+            <option value="Groceries">Groceries & Vegetables</option>
+            <option value="Petrol">Petrol / Fuel</option>
+            <option value="Dining Out">Dining Out / Snacks</option>
+            <option value="Utilities">Utilities & Bills</option>
+            <option value="Chit Fund">Chit Fund (Fixed)</option>
+            <option value="Mutual Fund SIP">Mutual Fund / Investment</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-xs text-slate-500 font-medium">Date</label>
+            <input type="date" id="date" required class="w-full border rounded-xl p-2.5 mt-1 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none">
+          </div>
+          <div>
+            <label class="text-xs text-slate-500 font-medium">Payment</label>
+            <select id="paymentMode" class="w-full border rounded-xl p-2.5 mt-1 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none">
+              <option value="UPI">UPI</option>
+              <option value="Cash">Cash</option>
+              <option value="Credit Card">Credit Card</option>
+              <option value="Bank Transfer">Bank Transfer</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="text-xs text-slate-500 font-medium">Note</label>
+          <input type="text" id="note" placeholder="Optional note" class="w-full border rounded-xl p-2 mt-1 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+        </div>
+        <button type="submit" id="submitBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 rounded-xl transition shadow-md shadow-indigo-200">
+          Save Expense
+        </button>
+      </form>
+    </div>
+
+    <!-- List -->
+    <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+      <h2 class="font-semibold text-slate-700 mb-3 text-sm">Recent Entries</h2>
+      <div id="expenseList" class="space-y-2 max-h-64 overflow-y-auto">
+        <p class="text-xs text-slate-400 text-center py-4">Loading expenses...</p>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // PASTE YOUR LIVE GOOGLE APPS SCRIPT WEB APP URL BELOW:
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwT4R7qgKst2Qs4DX-JOYcxJPgzuubpZlvc6fRgo-78AQLzxmMoSWmpXML30nBN76DL/exec";
+    
+    let expenses = JSON.parse(localStorage.getItem('cachedExpenses') || '[]');
+    let offlineQueue = JSON.parse(localStorage.getItem('expenseQueue') || '[]');
+    let currentType = "Daily";
+
+    document.getElementById('date').valueAsDate = new Date();
+    
+    // Register Service Worker for Offline capability
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+
+    // Network Listeners
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', updateNetworkStatus);
+    
+    updateNetworkStatus();
+    if(navigator.onLine) syncData();
+
+    function setExpenseType(type) {
+      currentType = type;
+      if(type === 'Daily') {
+        document.getElementById('typeDaily').className = "flex-1 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 text-white";
+        document.getElementById('typeFixed').className = "flex-1 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600";
+      } else {
+        document.getElementById('typeFixed').className = "flex-1 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 text-white";
+        document.getElementById('typeDaily').className = "flex-1 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600";
+      }
+    }
+
+    function updateNetworkStatus() {
+      const alertBox = document.getElementById('offlineAlert');
+      if (navigator.onLine) {
+        document.getElementById('syncStatus').innerText = "Online ✅";
+        if(offlineQueue.length > 0) handleOnline();
+        else alertBox.classList.add('hidden');
+      } else {
+        document.getElementById('syncStatus').innerText = "Offline Mode ✈️";
+        if(offlineQueue.length > 0) {
+          alertBox.classList.remove('hidden');
+          document.getElementById('pendingCount').innerText = offlineQueue.length;
+        }
+        renderUI();
+      }
+    }
+
+    async function handleOnline() {
+      updateNetworkStatus();
+      if (offlineQueue.length === 0) {
+        syncData();
+        return;
+      }
+      
+      document.getElementById('syncStatus').innerText = "Syncing pending...";
+      let failed = [];
+      
+      for (let entry of offlineQueue) {
+        try {
+          await fetch(SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify(entry),
+            headers: { "Content-Type": "text/plain;charset=utf-8" }
+          });
+        } catch(e) {
+          failed.push(entry);
+        }
+      }
+      
+      offlineQueue = failed;
+      localStorage.setItem('expenseQueue', JSON.stringify(offlineQueue));
+      updateNetworkStatus();
+      if(offlineQueue.length === 0) syncData();
+    }
+
+    async function syncData() {
+      if(!navigator.onLine) return;
+      try {
+        const res = await fetch(SCRIPT_URL + '?action=getData');
+        const json = await res.json();
+        if(json.status === 'success') {
+          expenses = json.data.reverse();
+          localStorage.setItem('cachedExpenses', JSON.stringify(expenses));
+          renderUI();
+        }
+      } catch (err) {}
+    }
+
+    async function handleSubmit(e) {
+      e.preventDefault();
+      const btn = document.getElementById('submitBtn');
+      btn.innerText = "Saving...";
+      btn.disabled = true;
+
+      const entry = {
+        id: 'exp_' + Date.now(),
+        date: document.getElementById('date').value,
+        member: document.getElementById('activeMember').value,
+        type: currentType,
+        category: document.getElementById('category').value,
+        amount: parseFloat(document.getElementById('amount').value),
+        paymentMode: document.getElementById('paymentMode').value,
+        note: document.getElementById('note').value
+      };
+
+      if (navigator.onLine) {
+        try {
+          await fetch(SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify(entry),
+            headers: { "Content-Type": "text/plain;charset=utf-8" }
+          });
+          document.getElementById('expenseForm').reset();
+          document.getElementById('date').valueAsDate = new Date();
+          setExpenseType('Daily');
+          await syncData();
+        } catch(err) {
+          queueOffline(entry);
+        }
+      } else {
+        queueOffline(entry);
+      }
+      
+      btn.innerText = "Save Expense";
+      btn.disabled = false;
+    }
+
+    function queueOffline(entry) {
+      offlineQueue.push(entry);
+      localStorage.setItem('expenseQueue', JSON.stringify(offlineQueue));
+      
+      // Temporarily show it in the UI so the user sees it saved
+      expenses.unshift(entry);
+      localStorage.setItem('cachedExpenses', JSON.stringify(expenses));
+      
+      document.getElementById('expenseForm').reset();
+      document.getElementById('date').valueAsDate = new Date();
+      setExpenseType('Daily');
+      updateNetworkStatus();
+      renderUI();
+    }
+
+    async function deleteExpense(id) {
+      if(!confirm("Delete this entry?")) return;
+      if(!navigator.onLine) {
+        alert("You must be online to delete entries.");
+        return;
+      }
+      
+      document.getElementById('syncStatus').innerText = "Deleting...";
+      try {
+        await fetch(SCRIPT_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: "delete", id: id }),
+          headers: { "Content-Type": "text/plain;charset=utf-8" }
+        });
+        await syncData();
+        document.getElementById('syncStatus').innerText = "Online ✅";
+      } catch(err) {}
+    }
+
+    function renderUI() {
+      const list = document.getElementById('expenseList');
+      if(expenses.length === 0) {
+        list.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">No expenses recorded yet.</p>`;
+        document.getElementById('monthlyTotal').innerText = "₹0";
+        document.getElementById('fixedTotal').innerText = "₹0";
+        return;
+      }
+
+      let mTotal = 0;
+      let fTotal = 0;
+
+      list.innerHTML = expenses.map(item => {
+        const amt = Number(item.amount) || 0;
+        if(item.type === 'Fixed / Investment') fTotal += amt;
+        else mTotal += amt;
+
+        return `
+          <div class="flex justify-between items-center p-2.5 bg-slate-50 rounded-xl border border-slate-100 text-xs">
+            <div>
+              <div class="font-semibold text-slate-800">${item.category} <span class="text-[10px] text-indigo-600 font-normal">(${item.member})</span></div>
+              <div class="text-slate-400 text-[10px]">${item.date} • ${item.paymentMode} ${item.note ? '• ' + item.note : ''}</div>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="font-bold ${item.type === 'Fixed / Investment' ? 'text-emerald-600' : 'text-slate-800'}">₹${amt.toLocaleString()}</span>
+              <button onclick="deleteExpense('${item.id}')" class="text-slate-300 hover:text-red-500 font-bold px-1">×</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      document.getElementById('monthlyTotal').innerText = '₹' + mTotal.toLocaleString();
+      document.getElementById('fixedTotal').innerText = '₹' + fTotal.toLocaleString();
+    }
+  </script>
+</body>
+</html>
